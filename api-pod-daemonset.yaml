@@ -1,0 +1,35 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: api-pod
+spec:
+  selector:
+    matchLabels:
+      name: all-nodes
+  template:
+    metadata:
+      labels:
+        name: all-nodes
+    spec:
+      volumes:
+      - name: api-socket
+        hostPath:
+          path: /run/api.sock
+      - name: apiclient
+        hostPath:
+          path: /usr/bin/apiclient
+      containers:
+      - name:  api
+        image: debian:bullseye-slim
+        command:
+        - /bin/sh
+        - "-c"
+        - "apiclient set --json '{\"kernel\": {\"sysctl\": {\"vm.max_map_count\": \"262144\" } } }'"
+        volumeMounts:
+        - mountPath: /run/api.sock
+          name: api-socket
+        - mountPath: /usr/bin/apiclient
+          name: apiclient
+        securityContext:
+          privileged: true
