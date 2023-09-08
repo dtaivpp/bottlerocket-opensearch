@@ -8,52 +8,43 @@ brew install eksctl, kubectl, awscli, yq
 source .env
 ```
 
-
 ```bash
-eksctl create cluster -f bottlerocket-quickstart.yaml
+eksctl create cluster -f bottlerocket-quickstart-eks.yaml
 ```
 
 ```bash
-export DEMOACCOUNT=$(aws sts get-caller-identity —no-cli-pager | yq e '.Account' -)
+export DEMOACCOUNT=$(aws sts get-caller-identity | yq e '.Account' -)
 ```
 
 ```bash
-eksctl utils associate-iam-oidc-provider --region=us-east-2 --cluster=bottlerocket-opensearch-beta --approve
-```
-
-
-```bash
-helm repo add eks https://aws.github.io/eks-charts
-helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
- -n kube-system \
- --set clusterName=bottlerocket-opensearch-beta \
- --set serviceAccount.create=false \
- --set serviceAccount.name=bottlerocket-opensearch-beta
+eksctl utils associate-iam-oidc-provider \
+ --region=us-east-2 \
+ --cluster=bottlerocket-opensearch \
+ --approve
 ```
 
 ```bash
 eksctl create iamserviceaccount \
- --cluster=bottlerocket-opensearch-beta \
+ --cluster=bottlerocket-opensearch \
  --namespace=kube-system \
  --name=aws-load-balancer-controller-beta \
  --role-name "AmazonEKSLoadBalancerControllerRole-beta" \
  --attach-policy-arn=arn:aws:iam::$(echo $DEMOACCOUNT):policy/AWSLoadBalancerControllerIAMPolicy \
  --region=us-east-2 \
  --approve
-
 ```
 
 ```bash
-kubectl describe deploy -n kube-system aws-load-balancer-controller
+helm repo add eks https://aws.github.io/eks-charts
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+ --set clusterName=bottlerocket-opensearch \
+ --set serviceAccount.create=false \
+ --set serviceAccount.name=aws-load-balancer-controller-beta
 ```
 
-
 ```bash
-kubectl apply -f ./api-pod-daemonset.yaml
-```
-
-```bash
-kubectl delete -f  api-pod-daemonset.yaml
+kubectl describe deploy aws-load-balancer-controller
 ```
 
 ```bash
@@ -64,10 +55,7 @@ helm repo add opensearch-operator https://opster.github.io/opensearch-k8s-operat
 helm install opensearch-operator opensearch-operator/opensearch-operator
 ```
 
-Re-Auth
-```bash
-eksctl utils write-kubeconfig -f bottlerocket-quickstart-eks.yaml
-```
+
 
 ```bash
 kubectl apply -f opensearch-cluster.yaml
@@ -90,4 +78,12 @@ kubectl create secret generic opensearchpass \
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/fluent/fluent-operator/release-2.2/manifests/setup/setup.yaml
+```
+
+
+
+
+Re-Auth
+```bash
+eksctl utils write-kubeconfig -f bottlerocket-quickstart-eks.yaml
 ```

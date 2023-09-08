@@ -1,7 +1,7 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  namespace: kube-system
+  namespace: default
   name: ingress-dashboards
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
