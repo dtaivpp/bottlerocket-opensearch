@@ -14,11 +14,11 @@ spec:
     replicas: 1
     resources:
       requests:
-         memory: "512Mi"
-         cpu: "200m"
+         memory: "1024Mi"
+         cpu: "500m"
       limits:
-         memory: "512Mi"
-         cpu: "200m"
+         memory: "1024Mi"
+         cpu: "500m"
   nodePools:
     - component: nodes
       replicas: 3
