@@ -7,6 +7,7 @@ metadata:
     app.kubernetes.io/name: fluent-bit
 spec:
   image: kubesphere/fluent-bit:v2.1.9
+  containerLogRealPath: /var/log/containers
   positionDB:
     hostPath:
       path: /var/lib/fluent-bit/
@@ -155,6 +156,9 @@ spec:
   opensearch:
     host: opensearch-cluster.default.svc.cluster.local
     port: 9200
+    suppressTypeName: true
+    tls:
+      verify: false
     httpUser:
       valueFrom:
         secretKeyRef:
