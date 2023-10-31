@@ -10,6 +10,23 @@ Deploys a cluster based around the `bottlerocket-quickstart-eks.yaml` config. Th
 eksctl create cluster -f bottlerocket-quickstart-eks.yaml
 ```
 
+## Installing OpenSearch
+Add and install the OpenSearch Operator.
+```bash
+helm repo add opensearch-operator https://opster.github.io/opensearch-k8s-operator/
+helm install opensearch-operator opensearch-operator/opensearch-operator
+```
+
+Deploy the cluster according to the config. 
+```bash
+kubectl apply -f opensearch-cluster.yaml
+```
+
+Wait for all 3 OpenSearch nodes and 1 OpenSearch dashboard nodes to be ready. 
+```bash
+watch -n 2 kubectl get pods
+```
+
 ## Ingress Controller
 Create the policy for EKS to be able to create application load balanacers. 
 ```bash
@@ -58,43 +75,10 @@ Validate they are deployed
 ```bash
 kubectl describe deploy aws-load-balancer-controller
 ```
-## Installing OpenSearch
-Add and install the OpenSearch Operator.
-```bash
-helm repo add opensearch-operator https://opster.github.io/opensearch-k8s-operator/
-helm install opensearch-operator opensearch-operator/opensearch-operator
-```
-
-Deploy the cluster according to the config. 
-```bash
-kubectl apply -f opensearch-cluster.yaml
-```
-
-Wait for all 3 OpenSearch nodes and 1 OpenSearch dashboard nodes to be ready. 
-```bash
-watch -n 2 kubectl get pods
-```
 
 Create ingress for the dashboards. 
 ```bash
 kubectl apply -f dashboards-ingress.yaml
-```
-
-Add opensearch username/pw for Fluent-Bit to consume
-```bash
-kubectl create secret generic opensearchpass \
---from-literal=username=admin \
---from-literal=password=admin
-```
-
-Apply the fluentbit operator
-```bash
-kubectl apply -f https://raw.githubusercontent.com/fluent/fluent-operator/release-2.2/manifests/setup/setup.yaml
-```
-
-Deploy the fluentbit daemonset
-```bash
-kubectl apply -f fluentbit-daemonset.yaml 
 ```
 
 Find the ingress URL for OpenSearch
@@ -102,8 +86,31 @@ Find the ingress URL for OpenSearch
 kubectl get ingress/ingress-dashboards -n default -o yaml | yq e '.status.loadBalancer.ingress[0].hostname' -
 ```
 
+## Fluentbit Setup
+Add opensearch username/pw for Fluent-Bit to consume
+```bash
+kubectl create secret generic opensearchpass \
+--from-literal=username=admin \
+--from-literal=password=admin
+```
 
-Re-Auth
+Install the fluentbit operator
+```bash
+helm install fluent-operator --create-namespace -n fluent charts/fluent-operator/  --set containerRuntime=containerd
+```
+
+Deploy the fluentbit daemonset
+```bash
+kubectl apply -f fluentbit-daemonset.yaml 
+```
+
+
+## Util Commands
+```bash
+kubectl port-forward
+```
+
+Getting the Kubeconfig
 ```bash
 eksctl utils write-kubeconfig -f bottlerocket-quickstart-eks.yaml
 ```

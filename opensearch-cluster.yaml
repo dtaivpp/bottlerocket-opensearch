@@ -7,10 +7,10 @@ spec:
   general:
     serviceName: opensearch-cluster
     httpPort: 9200
-    version: 2.8.0
+    version: 2.11.0
   dashboards:
     enable: true
-    version: 2.8.0
+    version: 2.11.0
     replicas: 1
     resources:
       requests:
@@ -22,14 +22,14 @@ spec:
   nodePools:
     - component: nodes
       replicas: 3
-      diskSize: "5Gi"
+      diskSize: "10Gi"
       nodeSelector:
       resources:
          requests:
-            memory: "2Gi"
+            memory: "4Gi"
             cpu: "500m"
          limits:
-            memory: "2Gi"
+            memory: "4Gi"
             cpu: "500m"
       roles:
         - "cluster_manager"

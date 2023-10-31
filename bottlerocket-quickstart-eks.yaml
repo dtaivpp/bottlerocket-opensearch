@@ -3,12 +3,12 @@ apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 
 metadata:
-  name: bottlerocket-opensearch
-  region: us-east-2
-  version: "1.27"
+  name: "opn202"
+  region: us-west-2
+  version: "1.28"
 
 nodeGroups:
-  - name: ng-bottlerocket-opensearch
+  - name: ng-bottlerocket-quickstart
     instanceType: m5.2xlarge
     desiredCapacity: 5
     amiFamily: Bottlerocket

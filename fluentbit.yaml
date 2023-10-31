@@ -1,0 +1,241 @@
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: FluentBit
+metadata:
+  name: fluent-bit
+  namespace: fluent
+  labels:
+    app.kubernetes.io/name: fluent-bit
+spec:
+  image: kubesphere/fluent-bit:v2.1.9
+  positionDB:
+    hostPath:
+      path: /var/lib/fluent-bit/
+  resources:
+    requests:
+      cpu: 10m
+      memory: 25Mi
+    limits:
+      cpu: 500m
+      memory: 200Mi
+  fluentBitConfigName: fluent-bit-config
+  tolerations:
+    - operator: Exists
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: node-role.kubernetes.io/edge
+            operator: DoesNotExist
+---
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFluentBitConfig
+metadata:
+  name: fluent-bit-config
+  labels:
+    app.kubernetes.io/name: fluent-bit
+spec:
+  service:
+    parsersFile: parsers.conf
+    httpServer: true
+  inputSelector:
+    matchLabels:
+      fluentbit.fluent.io/enabled: "true"
+  filterSelector:
+    matchLabels:
+      fluentbit.fluent.io/enabled: "true"
+  outputSelector:
+    matchLabels:
+      fluentbit.fluent.io/enabled: "true"
+---
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterInput
+metadata:
+  name: docker
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/component: logging
+spec:
+  systemd:
+    tag: service.*
+    path: /var/log/journal
+    db: /fluent-bit/tail/systemd.db
+    dbSync: Normal
+    systemdFilter:
+      - _SYSTEMD_UNIT=docker.service
+      - _SYSTEMD_UNIT=kubelet.service
+---
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterInput
+metadata:
+  name: tail
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/component: logging
+spec:
+  tail:
+    tag: kube.*
+    path: /var/log/containers/*.log
+    parser: docker
+    refreshIntervalSeconds: 10
+    memBufLimit: 100MB
+    skipLongLines: true
+    db: /fluent-bit/tail/pos.db
+    dbSync: Normal
+---
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: kubernetes
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/component: logging
+spec:
+  match: kube.*
+  filters:
+  - kubernetes:
+      kubeURL: https://kubernetes.default.svc:443
+      kubeCAFile: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      kubeTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      labels: false
+      annotations: false
+  - nest:
+      operation: lift
+      nestedUnder: kubernetes
+      addPrefix: kubernetes_
+  - modify:
+      rules:
+      - remove: stream
+      - remove: kubernetes_pod_id
+      - remove: kubernetes_host
+      - remove: kubernetes_container_hash
+  - nest:
+      operation: nest
+      wildcard:
+      - kubernetes_*
+      nestUnder: kubernetes
+      removePrefix: kubernetes_
+---
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: systemd
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/component: logging
+spec:
+  match: service.*
+  filters:
+  - lua:
+      script:
+        key: systemd.lua
+        name: fluent-bit-lua
+      call: add_time
+      timeAsTable: true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: opensearchcredentials
+  namespace: fluent
+type: Opaque
+data:
+  username: YWRtaW4=
+  password: YWRtaW4=
+---
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterOutput
+metadata:
+  name: fluentd-output-opensearch
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/component: logging
+spec:
+  matchRegex: (?:kube|service)\.(.*)
+  opensearch:
+    host: opensearch-cluster.default.svc.cluster.local
+    port: 9200
+    httpUser:
+      valueFrom:
+        secretKeyRef:
+          name: opensearchcredentials
+          key: username
+    httpPassword:
+      valueFrom:
+        secretKeyRef:
+          name: opensearchcredentials
+          key: password
+    index: "kubernetes"
+    timeKey: "@timestamp"
+---
+apiVersion: fluentbit.fluent.io/v1alpha2
+kind: ClusterFilter
+metadata:
+  name: containerd
+  labels:
+    fluentbit.fluent.io/enabled: "true"
+    fluentbit.fluent.io/component: logging
+spec:
+  match: kube.*
+  filters:
+  - lua:
+      script:
+        key: containerd.lua
+        name: fluent-bit-containerd-config
+      call: containerd
+      timeAsTable: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-containerd-config
+  namespace: fluent
+data:
+  containerd.lua: |
+    function containerd( tag, timestamp, record)
+           if(record["logtag"]~=nil)
+           then
+           timeStr = os.date("!*t",  timestamp["sec"])
+            t = string.format("%4d-%02d-%02dT%02d:%02d:%02d.%sZ",
+            timeStr["year"], timeStr["month"], timeStr["day"],
+            timeStr["hour"], timeStr["min"], timeStr["sec"],
+            timestamp["nsec"]);
+            record["time"] = t;
+            record["log"] = record["message"];
+            record["message"] =  nil;
+            return 1, timestamp, record
+            else
+            return 0,timestamp,record
+           end
+    end
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-lua
+  labels:
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/name: fluent-bit-lua
+  namespace: fluent
+data:
+  systemd.lua: |
+    function add_time(tag, timestamp, record)
+      new_record = {}
+
+      timeStr = os.date("!*t", timestamp["sec"])
+      t = string.format("%4d-%02d-%02dT%02d:%02d:%02d.%sZ",
+      timeStr["year"], timeStr["month"], timeStr["day"],
+      timeStr["hour"], timeStr["min"], timeStr["sec"],
+      timestamp["nsec"])
+
+      kubernetes = {}
+      kubernetes["pod_name"] = record["_HOSTNAME"]
+      kubernetes["container_name"] = record["SYSLOG_IDENTIFIER"]
+      kubernetes["namespace_name"] = "kube-system"
+
+      new_record["time"] = t
+      new_record["log"] = record["MESSAGE"]
+      new_record["kubernetes"] = kubernetes
+
+      return 1, timestamp, new_record
+    end
