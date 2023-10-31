@@ -10,7 +10,7 @@ metadata:
 nodeGroups:
   - name: ng-bottlerocket-quickstart
     instanceType: m5.2xlarge
-    desiredCapacity: 5
+    desiredCapacity: 3
     amiFamily: Bottlerocket
     iam:
        attachPolicyARNs:
